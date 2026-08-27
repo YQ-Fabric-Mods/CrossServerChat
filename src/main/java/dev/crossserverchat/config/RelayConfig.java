@@ -233,25 +233,23 @@ public final class RelayConfig {
 				host: %s
 				# TCP port used by the relay host and all clients.
 				port: %d
-				# Shared secret used to encrypt relay traffic. Use the same value on every server.
+				# Shared secret used to encrypt relay traffic.
+				# Use the same value with its host on the client servers.
 				sharedSecret: %s
-				# Remote message types to display on this server. Sending is always enabled.
+				# Remote message display rules on this server.
+				# MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
 				message-relay:
 				  # Displays remote player chat messages.
 				  - player-chat: %s
-				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
 				    messageFormat: %s
 				  # Displays remote player join messages.
 				  - player-join: %s
-				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
 				    messageFormat: %s
 				  # Displays remote player leave messages.
 				  - player-leave: %s
-				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
 				    messageFormat: %s
-				  # Displays remote player death messages. %%message%% contains the vanilla death message.
+				  # Displays remote player death messages.
 				  - player-death: %s
-				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
 				    messageFormat: %s
 				# Maximum time in seconds a client waits while connecting to the host.
 				connectTimeoutSeconds: %d

@@ -15,7 +15,7 @@
 ```yaml
 # Mode: disabled, host, or client.
 mode: "host"
-# Unique name used to identify this Minecraft server in chat messages.
+# Unique name used to identify this Minecraft server in relayed messages.
 serverName: "Survival"
 # Network address the host mode listens on.
 bindAddress: "0.0.0.0"
@@ -23,31 +23,30 @@ bindAddress: "0.0.0.0"
 host: "127.0.0.1"
 # TCP port used by the relay host and all clients.
 port: 8192
-# Shared secret used to encrypt relay traffic. Use the same value on every server.
+# Shared secret used to encrypt relay traffic.
+# Use the same value with its host on the client servers.
 sharedSecret: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-# Remote message types to display on this server. Sending is always enabled.
+# Remote message display rules on this server.
+# MiniMessage format. Available placeholders: %server%, %player%, %message%.
 message-relay:
   # Displays remote player chat messages.
   - player-chat: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <%player%> %message%"
   # Displays remote player join messages.
   - player-join: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <yellow>%player% joined the game</yellow>"
   # Displays remote player leave messages.
   - player-leave: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <yellow>%player% left the game</yellow>"
-  # Displays remote player death messages. %message% contains the vanilla death message.
+  # Displays remote player death messages.
   - player-death: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> %message%"
 # Maximum time in seconds a client waits while connecting to the host.
 connectTimeoutSeconds: 5
 # Delay in seconds before a disconnected client attempts to reconnect.
 reconnectDelaySeconds: 5
 
+# Do not change this number.
 version: 3
 ```
 
@@ -56,7 +55,7 @@ version: 3
 ```yaml
 # Mode: disabled, host, or client.
 mode: "client"
-# Unique name used to identify this Minecraft server in chat messages.
+# Unique name used to identify this Minecraft server in relayed messages.
 serverName: "Creative"
 # Network address the host mode listens on.
 bindAddress: "0.0.0.0"
@@ -64,31 +63,30 @@ bindAddress: "0.0.0.0"
 host: "10.0.0.10"
 # TCP port used by the relay host and all clients.
 port: 8192
-# Shared secret used to encrypt relay traffic. Use the same value on every server.
+# Shared secret used to encrypt relay traffic.
+# Use the same value with its host on the client servers.
 sharedSecret: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-# Remote message types to display on this server. Sending is always enabled.
+# Remote message display rules on this server.
+# MiniMessage format. Available placeholders: %server%, %player%, %message%.
 message-relay:
   # Displays remote player chat messages.
   - player-chat: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <%player%> %message%"
   # Displays remote player join messages.
   - player-join: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <yellow>%player% joined the game</yellow>"
   # Displays remote player leave messages.
   - player-leave: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> <yellow>%player% left the game</yellow>"
-  # Displays remote player death messages. %message% contains the vanilla death message.
+  # Displays remote player death messages.
   - player-death: enabled
-    # MiniMessage format. Available placeholders: %server%, %player%, %message%.
     messageFormat: "<gray>[%server%]</gray> %message%"
 # Maximum time in seconds a client waits while connecting to the host.
 connectTimeoutSeconds: 5
 # Delay in seconds before a disconnected client attempts to reconnect.
 reconnectDelaySeconds: 5
 
+# Do not change this number.
 version: 3
 ```
 

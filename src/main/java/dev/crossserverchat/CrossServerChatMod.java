@@ -86,7 +86,6 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 					.replace("%player%", message.playerName())
 					.replace("%message%", message.text());
 			server.getPlayerList().broadcastSystemMessage(Component.literal(rendered), false);
-			LOGGER.info("[CrossServerChat:{}] <{}> {}", message.server(), message.playerName(), message.text());
 		});
 	}
 

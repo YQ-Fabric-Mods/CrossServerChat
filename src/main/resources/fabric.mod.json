@@ -1,0 +1,23 @@
+{
+	"schemaVersion": 1,
+	"id": "crossserverchat",
+	"version": "${version}",
+	"name": "CrossServerChat",
+	"description": "A simple server-only chat bridge between Minecraft servers.",
+	"authors": [
+		"github.com/YQ-Fabric-Mods"
+	],
+	"license": "MIT",
+	"environment": "server",
+	"entrypoints": {
+		"server": [
+			"dev.crossserverchat.CrossServerChatMod"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": ">=0.157.0+26.2"
+	}
+}

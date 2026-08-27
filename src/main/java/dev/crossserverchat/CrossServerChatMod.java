@@ -1,6 +1,8 @@
 package dev.crossserverchat;
 
+import dev.crossserverchat.command.CrossServerChatCommand;
 import dev.crossserverchat.config.RelayConfig;
+import dev.crossserverchat.config.RelayConfigManager;
 import dev.crossserverchat.net.RelayClient;
 import dev.crossserverchat.net.RelayHost;
 import dev.crossserverchat.net.RelayTransport;
@@ -16,22 +18,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.nio.file.Path;
 
 public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	public static final String MOD_ID = "crossserverchat";
 	private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	private RelayConfig config;
+	private RelayConfigManager configManager;
 	private volatile RelayTransport transport;
 
 	@Override
 	public void onInitializeServer() {
-		Path configDirectory = FabricLoader.getInstance().getConfigDir();
-		Path configPath = configDirectory.resolve("cross-server-chat.yaml");
-		Path legacyConfigPath = configDirectory.resolve("cross-server-chat.json");
+		configManager = new RelayConfigManager(FabricLoader.getInstance().getConfigDir(), LOGGER);
 		try {
-			config = RelayConfig.load(configPath, legacyConfigPath, LOGGER);
+			config = configManager.load();
 		} catch (IOException exception) {
 			LOGGER.error("CrossServerChat is disabled because its configuration could not be loaded", exception);
 			return;
@@ -42,12 +42,13 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, boundChatType) ->
 				publishLocalChat(sender, message.decoratedContent().getString())
 		);
+		CrossServerChatCommand.register(this::reload, LOGGER);
 	}
 
-	private void startRelay(MinecraftServer server) {
+	private boolean startRelay(MinecraftServer server) {
 		if (config.mode() == RelayConfig.Mode.DISABLED) {
 			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
-			return;
+			return true;
 		}
 
 		RelayTransport newTransport = switch (config.mode()) {
@@ -60,10 +61,19 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 			newTransport.start();
 			transport = newTransport;
 			LOGGER.info("CrossServerChat started in {} mode as '{}'", config.mode(), config.serverName());
+			return true;
 		} catch (IOException exception) {
 			newTransport.close();
 			LOGGER.error("Could not start CrossServerChat", exception);
+			return false;
 		}
+	}
+
+	private boolean reload(MinecraftServer server) throws IOException {
+		RelayConfig reloaded = configManager.load();
+		stopRelay();
+		config = reloaded;
+		return startRelay(server);
 	}
 
 	private void publishLocalChat(ServerPlayer sender, String text) {

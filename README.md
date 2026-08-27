@@ -63,6 +63,8 @@ version: 2
 - `messageFormat`字段：占位符目前支持 %server%、%player% 和 %message%
 - `sharedSecret`字段：启用前请替换为复杂密码
 
+修改配置后，可执行 `/crossserverchat reload` 命令重载配置，无需重启服务器。
+
 ### 消息格式自定义
 
 `messageFormat`使用[MiniMessage格式](https://docs.papermc.io/adventure/minimessage/format/)，支持命名颜色、RGB颜色、粗体、渐变和彩虹等文本样式。举一点例子：

@@ -21,7 +21,7 @@ class MessageCodecTest {
 	@Test
 	void roundTripsAnEncryptedJsonFrame() throws IOException {
 		RelayMessage expected = RelayMessage.create(
-				"creative", UUID.randomUUID(), "Steve", "你好，世界"
+				MessageType.PLAYER_CHAT, "creative", UUID.randomUUID(), "Steve", "你好，世界"
 		);
 
 		byte[] encoded = encode(codec, expected);
@@ -35,7 +35,7 @@ class MessageCodecTest {
 	@Test
 	void usesAFreshNonceForEveryFrame() throws IOException {
 		RelayMessage message = RelayMessage.create(
-				"creative", UUID.randomUUID(), "Steve", "same plaintext"
+				MessageType.PLAYER_CHAT, "creative", UUID.randomUUID(), "Steve", "same plaintext"
 		);
 
 		assertFalse(Arrays.equals(encode(codec, message), encode(codec, message)));
@@ -44,7 +44,7 @@ class MessageCodecTest {
 	@Test
 	void rejectsTamperedCiphertext() throws IOException {
 		RelayMessage message = RelayMessage.create(
-				"creative", UUID.randomUUID(), "Steve", "do not alter"
+				MessageType.PLAYER_CHAT, "creative", UUID.randomUUID(), "Steve", "do not alter"
 		);
 		byte[] encoded = encode(codec, message);
 		encoded[encoded.length - 1] ^= 1;
@@ -57,7 +57,7 @@ class MessageCodecTest {
 	@Test
 	void rejectsTheWrongSharedSecret() throws IOException {
 		RelayMessage message = RelayMessage.create(
-				"creative", UUID.randomUUID(), "Steve", "secret text"
+				MessageType.PLAYER_CHAT, "creative", UUID.randomUUID(), "Steve", "secret text"
 		);
 		byte[] encoded = encode(codec, message);
 		MessageCodec wrongCodec = new MessageCodec("a-different-secret-that-is-also-long");

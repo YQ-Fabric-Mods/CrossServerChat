@@ -2,6 +2,7 @@ package dev.crossserverchat.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import dev.crossserverchat.protocol.MessageType;
 import org.slf4j.Logger;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -16,6 +17,9 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.EnumMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -25,22 +29,21 @@ import java.util.Map;
 public final class RelayConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 	private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
-	private static final int CURRENT_VERSION = 2;
 
-	private int version = CURRENT_VERSION;
+	private int version = RelayConfigMigrator.CURRENT_VERSION;
 	private String mode = "disabled";
 	private String serverName = "server-1";
 	private String bindAddress = "0.0.0.0";
 	private String host = "127.0.0.1";
 	private int port = 8192;
 	private String sharedSecret = "";
-	private String messageFormat = "<gray>[%server%]</gray> <%player%> %message%";
+	private EnumMap<MessageType, MessageRelay> messageRelay = defaultMessageRelay();
 	private int connectTimeoutSeconds = 5;
 	private int reconnectDelaySeconds = 5;
 
 	public static RelayConfig load(Path yamlPath, Path legacyJsonPath, Logger logger) throws IOException {
 		if (Files.exists(yamlPath)) {
-			RelayConfig config = loadYaml(yamlPath);
+			RelayConfig config = loadYamlAndUpgrade(yamlPath, logger);
 			if (Files.exists(legacyJsonPath)) {
 				Files.delete(legacyJsonPath);
 				logger.info("Removed obsolete CrossServerChat configuration {}.", legacyJsonPath);
@@ -71,65 +74,146 @@ public final class RelayConfig {
 			logger.warn("Created {}. Configure it and restart the server to enable CrossServerChat.", yamlPath);
 			return config;
 		}
-		return loadYaml(yamlPath);
+		return loadYamlAndUpgrade(yamlPath, logger);
+	}
+
+	private static RelayConfig loadYamlAndUpgrade(Path path, Logger logger) throws IOException {
+		LoadedConfig loaded = loadYaml(path);
+		if (loaded.migrated()) {
+			loaded.config().save(path);
+			logger.info("Upgraded CrossServerChat configuration {} from version {} to version {}.",
+					path, loaded.originalVersion(), RelayConfigMigrator.CURRENT_VERSION);
+		}
+		return loaded.config();
 	}
 
 	private static RelayConfig loadLegacyJson(Path path) throws IOException {
 		try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-			RelayConfig config = GSON.fromJson(reader, RelayConfig.class);
-			if (config == null) {
-				throw new IOException("Configuration file is empty");
-			}
-			config.version = CURRENT_VERSION;
-			config.applyDefaults();
-			config.validate();
-			return config;
+			Map<String, Object> values = mapping(GSON.fromJson(reader, Object.class));
+			values.put("version", 2);
+			RelayConfigMigrator.migrate(values);
+			return fromValues(values);
 		} catch (RuntimeException exception) {
 			throw new IOException("Could not parse " + path, exception);
 		}
 	}
 
-	private static RelayConfig loadYaml(Path path) throws IOException {
+	private static LoadedConfig loadYaml(Path path) throws IOException {
 		try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-			Object document = YAML.load(reader);
-			if (!(document instanceof Map<?, ?> values)) {
-				throw new IOException("Configuration must be a YAML mapping");
-			}
-
-			RelayConfig config = new RelayConfig();
-			config.version = requiredInteger(values, "version");
-			config.mode = string(values, "mode", config.mode);
-			config.serverName = string(values, "serverName", config.serverName);
-			config.bindAddress = string(values, "bindAddress", config.bindAddress);
-			config.host = string(values, "host", config.host);
-			config.port = integer(values, "port", config.port);
-			config.sharedSecret = string(values, "sharedSecret", config.sharedSecret);
-			config.messageFormat = string(values, "messageFormat", config.messageFormat);
-			config.connectTimeoutSeconds = integer(values, "connectTimeoutSeconds", config.connectTimeoutSeconds);
-			config.reconnectDelaySeconds = integer(values, "reconnectDelaySeconds", config.reconnectDelaySeconds);
-			config.applyDefaults();
-			config.validate();
-			return config;
+			Map<String, Object> values = mapping(YAML.load(reader));
+			int originalVersion = requiredInteger(values, "version");
+			boolean migrated = RelayConfigMigrator.migrate(values);
+			return new LoadedConfig(fromValues(values), originalVersion, migrated);
 		} catch (RuntimeException exception) {
 			throw new IOException("Could not parse " + path, exception);
 		}
 	}
 
-	private static String string(Map<?, ?> values, String key, String defaultValue) throws IOException {
+	private static Map<String, Object> mapping(Object document) throws IOException {
+		if (!(document instanceof Map<?, ?> source)) {
+			throw new IOException("Configuration must be a mapping");
+		}
+		Map<String, Object> values = new LinkedHashMap<>();
+		for (Map.Entry<?, ?> entry : source.entrySet()) {
+			if (!(entry.getKey() instanceof String key)) {
+				throw new IOException("Configuration keys must be strings");
+			}
+			values.put(key, entry.getValue());
+		}
+		return values;
+	}
+
+	private static RelayConfig fromValues(Map<String, Object> values) throws IOException {
+		RelayConfig config = new RelayConfig();
+		config.version = requiredInteger(values, "version");
+		config.mode = string(values, "mode", config.mode);
+		config.serverName = string(values, "serverName", config.serverName);
+		config.bindAddress = string(values, "bindAddress", config.bindAddress);
+		config.host = string(values, "host", config.host);
+		config.port = integer(values, "port", config.port);
+		config.sharedSecret = string(values, "sharedSecret", config.sharedSecret);
+		config.messageRelay = messageRelay(values.get("message-relay"));
+		config.connectTimeoutSeconds = integer(values, "connectTimeoutSeconds", config.connectTimeoutSeconds);
+		config.reconnectDelaySeconds = integer(values, "reconnectDelaySeconds", config.reconnectDelaySeconds);
+		config.applyDefaults();
+		config.validate();
+		return config;
+	}
+
+	private static EnumMap<MessageType, MessageRelay> messageRelay(Object value) throws IOException {
+		if (!(value instanceof List<?> rules)) {
+			throw new IOException("message-relay must be a list");
+		}
+
+		EnumMap<MessageType, MessageRelay> result = new EnumMap<>(MessageType.class);
+		for (Object valueRule : rules) {
+			if (!(valueRule instanceof Map<?, ?> rule)) {
+				throw new IOException("Each message-relay item must be a mapping");
+			}
+
+			MessageType type = null;
+			for (MessageType candidate : MessageType.values()) {
+				if (rule.containsKey(candidate.configKey())) {
+					if (type != null) {
+						throw new IOException("Each message-relay item must contain exactly one message type");
+					}
+					type = candidate;
+				}
+			}
+			if (type == null) {
+				throw new IOException("Unknown message type in message-relay");
+			}
+
+			for (Object key : rule.keySet()) {
+				if (!type.configKey().equals(key) && !"messageFormat".equals(key)) {
+					throw new IOException("Unknown field in " + type.configKey() + " relay: " + key);
+				}
+			}
+
+			boolean enabled = relayState(rule.get(type.configKey()), type);
+			String format = requiredString(rule, "messageFormat");
+			if (result.put(type, new MessageRelay(enabled, format)) != null) {
+				throw new IOException("Duplicate message-relay item: " + type.configKey());
+			}
+		}
+
+		for (MessageType type : MessageType.values()) {
+			if (!result.containsKey(type)) {
+				throw new IOException("Missing message-relay item: " + type.configKey());
+			}
+		}
+		return result;
+	}
+
+	private static boolean relayState(Object value, MessageType type) throws IOException {
+		if ("enabled".equals(value)) return true;
+		if ("disabled".equals(value)) return false;
+		throw new IOException(type.configKey() + " must be enabled or disabled");
+	}
+
+	private static String requiredString(Map<?, ?> values, String key) throws IOException {
+		Object value = values.get(key);
+		if (value instanceof String string) return string;
+		throw new IOException(key + " is required and must be a string");
+	}
+
+	private static String string(Map<String, Object> values, String key, String defaultValue) throws IOException {
 		Object value = values.get(key);
 		if (value == null) return defaultValue;
 		if (value instanceof String string) return string;
 		throw new IOException(key + " must be a string");
 	}
 
-	private static int integer(Map<?, ?> values, String key, int defaultValue) throws IOException {
+	private static int integer(Map<String, Object> values, String key, int defaultValue) throws IOException {
 		Object value = values.get(key);
 		if (value == null) return defaultValue;
-		if (value instanceof Integer integer) return integer;
+		if (value instanceof Number number && number.doubleValue() == number.intValue()) {
+			return number.intValue();
+		}
 		throw new IOException(key + " must be an integer");
 	}
 
-	private static int requiredInteger(Map<?, ?> values, String key) throws IOException {
+	private static int requiredInteger(Map<String, Object> values, String key) throws IOException {
 		if (!values.containsKey(key)) {
 			throw new IOException(key + " is required");
 		}
@@ -141,7 +225,7 @@ public final class RelayConfig {
 		String content = """
 				# Mode: disabled, host, or client.
 				mode: %s
-				# Unique name used to identify this Minecraft server in chat messages.
+				# Unique name used to identify this Minecraft server in relayed messages.
 				serverName: %s
 				# Network address the host mode listens on.
 				bindAddress: %s
@@ -151,8 +235,24 @@ public final class RelayConfig {
 				port: %d
 				# Shared secret used to encrypt relay traffic. Use the same value on every server.
 				sharedSecret: %s
-				# MiniMessage format for remote chat. Available placeholders: %%server%%, %%player%%, %%message%%.
-				messageFormat: %s
+				# Remote message types to display on this server. Sending is always enabled.
+				message-relay:
+				  # Displays remote player chat messages.
+				  - player-chat: %s
+				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
+				    messageFormat: %s
+				  # Displays remote player join messages.
+				  - player-join: %s
+				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
+				    messageFormat: %s
+				  # Displays remote player leave messages.
+				  - player-leave: %s
+				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
+				    messageFormat: %s
+				  # Displays remote player death messages. %%message%% contains the vanilla death message.
+				  - player-death: %s
+				    # MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
+				    messageFormat: %s
 				# Maximum time in seconds a client waits while connecting to the host.
 				connectTimeoutSeconds: %d
 				# Delay in seconds before a disconnected client attempts to reconnect.
@@ -167,7 +267,14 @@ public final class RelayConfig {
 				quote(host),
 				port,
 				quote(sharedSecret),
-				quote(messageFormat),
+				state(MessageType.PLAYER_CHAT),
+				quote(messageRelay.get(MessageType.PLAYER_CHAT).messageFormat()),
+				state(MessageType.PLAYER_JOIN),
+				quote(messageRelay.get(MessageType.PLAYER_JOIN).messageFormat()),
+				state(MessageType.PLAYER_LEAVE),
+				quote(messageRelay.get(MessageType.PLAYER_LEAVE).messageFormat()),
+				state(MessageType.PLAYER_DEATH),
+				quote(messageRelay.get(MessageType.PLAYER_DEATH).messageFormat()),
 				connectTimeoutSeconds,
 				reconnectDelaySeconds,
 				version
@@ -185,6 +292,10 @@ public final class RelayConfig {
 		}
 	}
 
+	private String state(MessageType type) {
+		return messageRelay.get(type).enabled() ? "enabled" : "disabled";
+	}
+
 	private static String quote(String value) {
 		return GSON.toJson(value);
 	}
@@ -194,14 +305,12 @@ public final class RelayConfig {
 		if (serverName == null || serverName.isBlank()) serverName = "server-1";
 		if (bindAddress == null || bindAddress.isBlank()) bindAddress = "0.0.0.0";
 		if (host == null || host.isBlank()) host = "127.0.0.1";
-		if (messageFormat == null || messageFormat.isBlank()) {
-			messageFormat = "<gray>[%server%]</gray> <%player%> %message%";
-		}
 	}
 
 	private void validate() throws IOException {
-		if (version != CURRENT_VERSION) {
-			throw new IOException("Unsupported configuration version " + version + "; expected " + CURRENT_VERSION);
+		if (version != RelayConfigMigrator.CURRENT_VERSION) {
+			throw new IOException("Unsupported configuration version " + version
+					+ "; expected " + RelayConfigMigrator.CURRENT_VERSION);
 		}
 		try {
 			Mode.valueOf(mode.toUpperCase(Locale.ROOT));
@@ -213,6 +322,12 @@ public final class RelayConfig {
 		}
 		if (serverName.length() > 64 || containsLineBreak(serverName)) {
 			throw new IOException("serverName must be at most 64 characters and one line");
+		}
+		for (MessageType type : MessageType.values()) {
+			String format = messageRelay.get(type).messageFormat();
+			if (format.isBlank() || containsLineBreak(format)) {
+				throw new IOException(type.configKey() + " messageFormat must be non-blank and one line");
+			}
 		}
 		if (connectTimeoutSeconds < 1 || connectTimeoutSeconds > 60) {
 			throw new IOException("connectTimeoutSeconds must be between 1 and 60");
@@ -227,6 +342,23 @@ public final class RelayConfig {
 
 	private static boolean containsLineBreak(String value) {
 		return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+	}
+
+	private static EnumMap<MessageType, MessageRelay> defaultMessageRelay() {
+		EnumMap<MessageType, MessageRelay> defaults = new EnumMap<>(MessageType.class);
+		for (MessageType type : MessageType.values()) {
+			defaults.put(type, new MessageRelay(true, defaultFormat(type)));
+		}
+		return defaults;
+	}
+
+	static String defaultFormat(MessageType type) {
+		return switch (type) {
+			case PLAYER_CHAT -> "<gray>[%server%]</gray> <%player%> %message%";
+			case PLAYER_JOIN -> "<gray>[%server%]</gray> <yellow>%player% joined the game</yellow>";
+			case PLAYER_LEAVE -> "<gray>[%server%]</gray> <yellow>%player% left the game</yellow>";
+			case PLAYER_DEATH -> "<gray>[%server%]</gray> %message%";
+		};
 	}
 
 	private static String generateSecret() {
@@ -267,8 +399,8 @@ public final class RelayConfig {
 		return sharedSecret;
 	}
 
-	public String messageFormat() {
-		return messageFormat;
+	public MessageRelay messageRelay(MessageType type) {
+		return messageRelay.get(type);
 	}
 
 	public int connectTimeoutSeconds() {
@@ -283,5 +415,11 @@ public final class RelayConfig {
 		DISABLED,
 		HOST,
 		CLIENT
+	}
+
+	public record MessageRelay(boolean enabled, String messageFormat) {
+	}
+
+	private record LoadedConfig(RelayConfig config, int originalVersion, boolean migrated) {
 	}
 }

@@ -1,6 +1,7 @@
 package dev.crossserverchat;
 
 import dev.crossserverchat.protocol.RelayMessage;
+import dev.crossserverchat.protocol.MessageType;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
@@ -63,7 +64,7 @@ class MessageFormatterTest {
 	}
 
 	private static RelayMessage message(String server, String player, String text) {
-		return RelayMessage.create(server, UUID.randomUUID(), player, text);
+		return RelayMessage.create(MessageType.PLAYER_CHAT, server, UUID.randomUUID(), player, text);
 	}
 
 	private static String plainText(Component component) {

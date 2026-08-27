@@ -1,6 +1,7 @@
 package dev.crossserverchat.net;
 
 import dev.crossserverchat.config.RelayConfig;
+import dev.crossserverchat.protocol.MessageType;
 import dev.crossserverchat.protocol.RelayMessage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -59,19 +60,20 @@ class RelayNetworkTest {
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
 			while ((hostReceived.getCount() != 0 || secondReceived.getCount() != 0)
 					&& System.nanoTime() < deadline) {
-				first.publish(UUID.randomUUID(), "Alex", "network test");
+				first.publish(MessageType.PLAYER_CHAT, UUID.randomUUID(), "Alex", "network test");
 				Thread.sleep(100);
 			}
 
 			assertTrue(hostReceived.await(0, TimeUnit.MILLISECONDS), "host did not receive the message");
 			assertTrue(secondReceived.await(0, TimeUnit.MILLISECONDS), "second client did not receive the message");
 			assertEquals("survival", received.get().server());
+			assertEquals(MessageType.PLAYER_CHAT, received.get().type());
 			assertEquals("Alex", received.get().playerName());
 			assertEquals("network test", received.get().text());
 
 			deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(4);
 			while (hostPublishedReceived.getCount() != 0 && System.nanoTime() < deadline) {
-				host.publish(UUID.randomUUID(), "Steve", "host test");
+				host.publish(MessageType.PLAYER_CHAT, UUID.randomUUID(), "Steve", "host test");
 				Thread.sleep(100);
 			}
 			assertTrue(hostPublishedReceived.await(0, TimeUnit.MILLISECONDS),
@@ -86,14 +88,22 @@ class RelayNetworkTest {
 	private RelayConfig config(String mode, String serverName, int port, String secret) throws IOException {
 		Path path = temporaryDirectory.resolve(serverName + ".yaml");
 		Files.writeString(path, """
-				version: 2
+				version: 3
 				mode: "%s"
 				serverName: "%s"
 				bindAddress: "127.0.0.1"
 				host: "127.0.0.1"
 				port: %d
 				sharedSecret: "%s"
-				messageFormat: "[%%server%%] <%%player%%> %%message%%"
+				message-relay:
+				  - player-chat: enabled
+				    messageFormat: "[%%server%%] <%%player%%> %%message%%"
+				  - player-join: enabled
+				    messageFormat: "[%%server%%] %%player%% joined"
+				  - player-leave: enabled
+				    messageFormat: "[%%server%%] %%player%% left"
+				  - player-death: enabled
+				    messageFormat: "[%%server%%] %%message%%"
 				connectTimeoutSeconds: 2
 				reconnectDelaySeconds: 1
 				""".formatted(mode, serverName, port, secret));

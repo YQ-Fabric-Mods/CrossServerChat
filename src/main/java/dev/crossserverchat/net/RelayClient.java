@@ -2,6 +2,7 @@ package dev.crossserverchat.net;
 
 import dev.crossserverchat.config.RelayConfig;
 import dev.crossserverchat.protocol.MessageCodec;
+import dev.crossserverchat.protocol.MessageType;
 import dev.crossserverchat.protocol.RecentMessageCache;
 import dev.crossserverchat.protocol.RelayMessage;
 import org.slf4j.Logger;
@@ -54,12 +55,12 @@ public final class RelayClient implements RelayTransport {
 	}
 
 	@Override
-	public void publish(UUID playerId, String playerName, String text) {
+	public void publish(MessageType type, UUID playerId, String playerName, String text) {
 		if (!running.get()) {
 			return;
 		}
 
-		RelayMessage message = RelayMessage.create(config.serverName(), playerId, playerName, text);
+		RelayMessage message = RelayMessage.create(type, config.serverName(), playerId, playerName, text);
 		recentMessages.markIfNew(message.id());
 		try {
 			writer.execute(() -> send(message));

@@ -6,10 +6,13 @@ import dev.crossserverchat.config.RelayConfigManager;
 import dev.crossserverchat.net.RelayClient;
 import dev.crossserverchat.net.RelayHost;
 import dev.crossserverchat.net.RelayTransport;
+import dev.crossserverchat.protocol.MessageType;
 import dev.crossserverchat.protocol.RelayMessage;
 import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.kyori.adventure.platform.modcommon.MinecraftServerAudiences;
 import net.minecraft.server.MinecraftServer;
@@ -40,8 +43,23 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		ServerLifecycleEvents.SERVER_STARTED.register(this::startRelay);
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> stopRelay());
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, boundChatType) ->
-				publishLocalChat(sender, message.decoratedContent().getString())
+				publishMessage(MessageType.PLAYER_CHAT, sender, message.decoratedContent().getString())
 		);
+		ServerPlayConnectionEvents.JOIN.register((listener, packetSender, server) ->
+				publishMessage(MessageType.PLAYER_JOIN, listener.getPlayer(), "")
+		);
+		ServerPlayConnectionEvents.DISCONNECT.register((listener, server) ->
+				publishMessage(MessageType.PLAYER_LEAVE, listener.getPlayer(), "")
+		);
+		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+			if (entity instanceof ServerPlayer player) {
+				publishMessage(
+						MessageType.PLAYER_DEATH,
+						player,
+						player.getCombatTracker().getDeathMessage().getString()
+				);
+			}
+		});
 		CrossServerChatCommand.register(this::reload, LOGGER);
 	}
 
@@ -76,25 +94,32 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		return startRelay(server);
 	}
 
-	private void publishLocalChat(ServerPlayer sender, String text) {
+	private void publishMessage(MessageType type, ServerPlayer sender, String text) {
 		RelayTransport current = transport;
-		if (current == null || text == null || text.isBlank()) {
+		if (current == null) {
 			return;
 		}
 
 		String oneLine = text.replace('\n', ' ').replace('\r', ' ');
+		if ((type == MessageType.PLAYER_CHAT || type == MessageType.PLAYER_DEATH) && oneLine.isBlank()) {
+			return;
+		}
 		if (oneLine.length() > RelayMessage.MAX_TEXT_LENGTH) {
 			oneLine = oneLine.substring(0, RelayMessage.MAX_TEXT_LENGTH);
 		}
-		current.publish(sender.getUUID(), sender.getName().getString(), oneLine);
+		current.publish(type, sender.getUUID(), sender.getName().getString(), oneLine);
 	}
 
 	private void showRemoteMessage(MinecraftServer server, RelayMessage message) {
 		// Socket callbacks run off-thread. Minecraft state must only be touched
 		// after handing the work back to the server thread.
 		server.execute(() -> {
+			RelayConfig.MessageRelay relay = config.messageRelay(message.type());
+			if (!relay.enabled()) {
+				return;
+			}
 			MinecraftServerAudiences.of(server).players().sendMessage(
-					MessageFormatter.render(config.messageFormat(), message)
+					MessageFormatter.render(relay.messageFormat(), message)
 			);
 		});
 	}

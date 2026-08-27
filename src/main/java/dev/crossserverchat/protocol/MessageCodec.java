@@ -27,13 +27,13 @@ public final class MessageCodec {
 	static final int NONCE_BYTES = 12;
 	private static final int GCM_TAG_BITS = 128;
 	private static final int GCM_TAG_BYTES = GCM_TAG_BITS / 8;
-	private static final byte WIRE_VERSION = 3;
+	private static final byte WIRE_VERSION = 4;
 	private static final byte[] HKDF_SALT =
-			"crossserverchat/hkdf-salt/v3".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/hkdf-salt/v4".getBytes(StandardCharsets.UTF_8);
 	private static final byte[] HKDF_INFO =
-			"crossserverchat/aes-256-gcm/v3".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/aes-256-gcm/v4".getBytes(StandardCharsets.UTF_8);
 	private static final byte[] AAD =
-			"crossserverchat/frame/v3".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/frame/v4".getBytes(StandardCharsets.UTF_8);
 	private static final Gson GSON = new Gson();
 	private static final SecureRandom RANDOM = new SecureRandom();
 	private final SecretKey encryptionKey;

@@ -25,7 +25,7 @@ public final class RelayConfig {
 	private String host = "127.0.0.1";
 	private int port = 8192;
 	private String sharedSecret = "";
-	private String messageFormat = "[%server%] <%player%> %message%";
+	private String messageFormat = "<gray>[%server%]</gray> <%player%> %message%";
 	private int connectTimeoutSeconds = 5;
 	private int reconnectDelaySeconds = 5;
 
@@ -62,7 +62,7 @@ public final class RelayConfig {
 		if (bindAddress == null || bindAddress.isBlank()) bindAddress = "0.0.0.0";
 		if (host == null || host.isBlank()) host = "127.0.0.1";
 		if (messageFormat == null || messageFormat.isBlank()) {
-			messageFormat = "[%server%] <%player%> %message%";
+			messageFormat = "<gray>[%server%]</gray> <%player%> %message%";
 		}
 	}
 

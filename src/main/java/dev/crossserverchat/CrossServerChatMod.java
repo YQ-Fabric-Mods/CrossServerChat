@@ -9,7 +9,7 @@ import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.network.chat.Component;
+import net.kyori.adventure.platform.modcommon.MinecraftServerAudiences;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import org.slf4j.Logger;
@@ -81,11 +81,9 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		// Socket callbacks run off-thread. Minecraft state must only be touched
 		// after handing the work back to the server thread.
 		server.execute(() -> {
-			String rendered = config.messageFormat()
-					.replace("%server%", message.server())
-					.replace("%player%", message.playerName())
-					.replace("%message%", message.text());
-			server.getPlayerList().broadcastSystemMessage(Component.literal(rendered), false);
+			MinecraftServerAudiences.of(server).players().sendMessage(
+					MessageFormatter.render(config.messageFormat(), message)
+			);
 		});
 	}
 

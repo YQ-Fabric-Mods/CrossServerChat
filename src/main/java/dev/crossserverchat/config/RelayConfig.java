@@ -27,7 +27,10 @@ import java.util.Map;
  * The intentionally small configuration shared by host and client modes.
  */
 public final class RelayConfig {
-	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+	private static final Gson GSON = new GsonBuilder()
+			.disableHtmlEscaping()
+			.setPrettyPrinting()
+			.create();
 	private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
 	private int version = RelayConfigMigrator.CURRENT_VERSION;
@@ -40,31 +43,6 @@ public final class RelayConfig {
 	private EnumMap<MessageType, MessageRelay> messageRelay = defaultMessageRelay();
 	private int connectTimeoutSeconds = 5;
 	private int reconnectDelaySeconds = 5;
-
-	public static RelayConfig load(Path yamlPath, Path legacyJsonPath, Logger logger) throws IOException {
-		if (Files.exists(yamlPath)) {
-			RelayConfig config = loadYamlAndUpgrade(yamlPath, logger);
-			if (Files.exists(legacyJsonPath)) {
-				Files.delete(legacyJsonPath);
-				logger.info("Removed obsolete CrossServerChat configuration {}.", legacyJsonPath);
-			}
-			return config;
-		}
-
-		if (Files.exists(legacyJsonPath)) {
-			RelayConfig config = loadLegacyJson(legacyJsonPath);
-			config.save(yamlPath);
-			Files.delete(legacyJsonPath);
-			logger.info("Upgraded CrossServerChat configuration from {} to {}.", legacyJsonPath, yamlPath);
-			return config;
-		}
-
-		RelayConfig config = new RelayConfig();
-		config.sharedSecret = generateSecret();
-		config.save(yamlPath);
-		logger.warn("Created {}. Configure it and restart the server to enable CrossServerChat.", yamlPath);
-		return config;
-	}
 
 	public static RelayConfig load(Path yamlPath, Logger logger) throws IOException {
 		if (Files.notExists(yamlPath)) {
@@ -85,17 +63,6 @@ public final class RelayConfig {
 					path, loaded.originalVersion(), RelayConfigMigrator.CURRENT_VERSION);
 		}
 		return loaded.config();
-	}
-
-	private static RelayConfig loadLegacyJson(Path path) throws IOException {
-		try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-			Map<String, Object> values = mapping(GSON.fromJson(reader, Object.class));
-			values.put("version", 2);
-			RelayConfigMigrator.migrate(values);
-			return fromValues(values);
-		} catch (RuntimeException exception) {
-			throw new IOException("Could not parse " + path, exception);
-		}
 	}
 
 	private static LoadedConfig loadYaml(Path path) throws IOException {

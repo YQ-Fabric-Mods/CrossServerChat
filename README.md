@@ -8,7 +8,7 @@
 
 ## 配置文件
 
-位于`config/cross-server-chat.yaml`。启动时如果只存在旧版 `cross-server-chat.json`，MOD 会自动迁移其配置，成功写入 YAML 后删除旧文件。v2 YAML 也会自动升级到 v3：原有聊天格式会保留，新增的进服、退服和死亡消息默认启用。
+位于`config/cross-server-chat.yaml`。
 
 `host` 配置示例：
 

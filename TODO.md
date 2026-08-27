@@ -1,0 +1,6 @@
+- [ ] 指数退避重试
+- [ ] 连接机制改进
+  - 不主动区分host/client，raft-like自动选举
+  - 改成以Redis sub/pub为中心？
+- [ ] 打tag自动构建发布
+- [ ] 适配Neoforge & 低版本

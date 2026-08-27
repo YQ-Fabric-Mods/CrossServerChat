@@ -8,38 +8,56 @@
 
 ## 配置文件
 
-位于`config/cross-server-chat.json`。
+位于`config/cross-server-chat.yaml`。启动时如果只存在旧版 `cross-server-chat.json`，MOD 会自动迁移其配置，成功写入 YAML 后删除旧文件。
 
 `host` 配置示例：
 
-```json
-{
-  "mode": "host",
-  "serverName": "Survival",
-  "bindAddress": "0.0.0.0",
-  "host": "127.0.0.1",
-  "port": 8192,
-  "sharedSecret": "XXXXXXXXXXXXXXXXX",
-  "messageFormat": "<gray>[%server%]</gray> <%player%> %message%",
-  "connectTimeoutSeconds": 5,
-  "reconnectDelaySeconds": 5
-}
+```yaml
+# Mode: disabled, host, or client.
+mode: "host"
+# Unique name used to identify this Minecraft server in chat messages.
+serverName: "Survival"
+# Network address the host mode listens on.
+bindAddress: "0.0.0.0"
+# Address of the relay host used by client mode.
+host: "127.0.0.1"
+# TCP port used by the relay host and all clients.
+port: 8192
+# Shared secret used to encrypt relay traffic. Use the same value on every server.
+sharedSecret: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+# MiniMessage format for remote chat. Available placeholders: %server%, %player%, %message%.
+messageFormat: "<gray>[%server%]</gray> <%player%> %message%"
+# Maximum time in seconds a client waits while connecting to the host.
+connectTimeoutSeconds: 5
+# Delay in seconds before a disconnected client attempts to reconnect.
+reconnectDelaySeconds: 5
+
+version: 2
 ```
 
 `client` 配置示例：
 
-```json
-{
-  "mode": "client",
-  "serverName": "Creative",
-  "bindAddress": "0.0.0.0",
-  "host": "10.0.0.10",
-  "port": 8192,
-  "sharedSecret": "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  "messageFormat": "<gray>[%server%]</gray> <%player%> %message%",
-  "connectTimeoutSeconds": 5,
-  "reconnectDelaySeconds": 5
-}
+```yaml
+# Mode: disabled, host, or client.
+mode: "client"
+# Unique name used to identify this Minecraft server in chat messages.
+serverName: "Creative"
+# Network address the host mode listens on.
+bindAddress: "0.0.0.0"
+# Address of the relay host used by client mode.
+host: "10.0.0.10"
+# TCP port used by the relay host and all clients.
+port: 8192
+# Shared secret used to encrypt relay traffic. Use the same value on every server.
+sharedSecret: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+# MiniMessage format for remote chat. Available placeholders: %server%, %player%, %message%.
+messageFormat: "<gray>[%server%]</gray> <%player%> %message%"
+# Maximum time in seconds a client waits while connecting to the host.
+connectTimeoutSeconds: 5
+# Delay in seconds before a disconnected client attempts to reconnect.
+reconnectDelaySeconds: 5
+
+version: 2
 ```
 
 - `messageFormat`字段：占位符目前支持 %server%、%player% 和 %message%
@@ -51,20 +69,20 @@
 
 默认格式：
 
-```json
-"messageFormat": "<gray>[%server%]</gray> <%player%> %message%"
+```yaml
+messageFormat: "<gray>[%server%]</gray> <%player%> %message%"
 ```
 
 RGB颜色和粗体：
 
-```json
-"messageFormat": "<#55ffaa><bold>[%server%]</bold></#55ffaa> <yellow>%player%</yellow><gray>: %message%"
+```yaml
+messageFormat: "<#55ffaa><bold>[%server%]</bold></#55ffaa> <yellow>%player%</yellow><gray>: %message%"
 ```
 
 渐变彩虹字体：
 
-```json
-"messageFormat": "<gradient:#5e4fa2:#f79459>[%server%]</gradient> <rainbow>%player%</rainbow><gray>: <white>%message%"
+```yaml
+messageFormat: "<gradient:#5e4fa2:#f79459>[%server%]</gradient> <rainbow>%player%</rainbow><gray>: <white>%message%"
 ```
 
 完整语法和可用标签参阅[MiniMessage官方文档](https://docs.papermc.io/adventure/minimessage/format/)。可以使用[MiniMessage Web Viewer](https://webui.advntr.dev/)在线预览文本格式。

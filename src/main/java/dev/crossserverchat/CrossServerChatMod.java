@@ -27,9 +27,11 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 
 	@Override
 	public void onInitializeServer() {
-		Path configPath = FabricLoader.getInstance().getConfigDir().resolve("cross-server-chat.json");
+		Path configDirectory = FabricLoader.getInstance().getConfigDir();
+		Path configPath = configDirectory.resolve("cross-server-chat.yaml");
+		Path legacyConfigPath = configDirectory.resolve("cross-server-chat.json");
 		try {
-			config = RelayConfig.load(configPath, LOGGER);
+			config = RelayConfig.load(configPath, legacyConfigPath, LOGGER);
 		} catch (IOException exception) {
 			LOGGER.error("CrossServerChat is disabled because its configuration could not be loaded", exception);
 			return;
@@ -44,7 +46,7 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 
 	private void startRelay(MinecraftServer server) {
 		if (config.mode() == RelayConfig.Mode.DISABLED) {
-			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.json and restart to enable it.");
+			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
 			return;
 		}
 

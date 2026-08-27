@@ -84,19 +84,18 @@ class RelayNetworkTest {
 	}
 
 	private RelayConfig config(String mode, String serverName, int port, String secret) throws IOException {
-		Path path = temporaryDirectory.resolve(serverName + ".json");
+		Path path = temporaryDirectory.resolve(serverName + ".yaml");
 		Files.writeString(path, """
-				{
-				  "mode": "%s",
-				  "serverName": "%s",
-				  "bindAddress": "127.0.0.1",
-				  "host": "127.0.0.1",
-				  "port": %d,
-				  "sharedSecret": "%s",
-				  "messageFormat": "[%%server%%] <%%player%%> %%message%%",
-				  "connectTimeoutSeconds": 2,
-				  "reconnectDelaySeconds": 1
-				}
+				version: 2
+				mode: "%s"
+				serverName: "%s"
+				bindAddress: "127.0.0.1"
+				host: "127.0.0.1"
+				port: %d
+				sharedSecret: "%s"
+				messageFormat: "[%%server%%] <%%player%%> %%message%%"
+				connectTimeoutSeconds: 2
+				reconnectDelaySeconds: 1
 				""".formatted(mode, serverName, port, secret));
 		return RelayConfig.load(path, LoggerFactory.getLogger("crossserverchat-test-config"));
 	}

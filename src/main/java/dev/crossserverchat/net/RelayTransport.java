@@ -6,7 +6,9 @@ import java.io.IOException;
 import java.util.UUID;
 
 public interface RelayTransport extends AutoCloseable {
-	void start() throws IOException;
+	void start(boolean blocking) throws IOException;
+
+	boolean connected();
 
 	void publish(MessageType type, UUID playerId, String playerName, String text);
 

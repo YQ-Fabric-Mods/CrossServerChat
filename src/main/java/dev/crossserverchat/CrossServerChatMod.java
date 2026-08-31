@@ -40,7 +40,7 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 			return;
 		}
 
-		ServerLifecycleEvents.SERVER_STARTED.register(this::startRelay);
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> startRelay(server, config, false));
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> stopRelay());
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, boundChatType) ->
 				publishMessage(MessageType.PLAYER_CHAT, sender, message.decoratedContent().getString())
@@ -63,22 +63,33 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		CrossServerChatCommand.register(this::reload, LOGGER);
 	}
 
-	private boolean startRelay(MinecraftServer server) {
-		if (!config.enabled()) {
+	private boolean startRelay(MinecraftServer server, RelayConfig newConfig, boolean blocking) {
+		if (!newConfig.enabled()) {
+			stopRelay();
+			config = newConfig;
 			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
 			return true;
 		}
 
 		RelayTransport newTransport = new RedisRelayTransport(
-				config,
+				newConfig,
 				LOGGER,
 				message -> showRemoteMessage(server, message)
 		);
 
 		try {
-			newTransport.start();
+			newTransport.start(blocking);
+			RelayTransport oldTransport = transport;
+			config = newConfig;
 			transport = newTransport;
-			LOGGER.info("CrossServerChat started as '{}'", config.serverName());
+			if (oldTransport != null) {
+				oldTransport.close();
+			}
+			if (blocking) {
+				LOGGER.info("CrossServerChat started as '{}'", newConfig.serverName());
+			} else {
+				LOGGER.info("CrossServerChat is connecting as '{}'", newConfig.serverName());
+			}
 			return true;
 		} catch (IOException exception) {
 			newTransport.close();
@@ -89,9 +100,7 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 
 	private boolean reload(MinecraftServer server) throws IOException {
 		RelayConfig reloaded = configManager.load();
-		stopRelay();
-		config = reloaded;
-		return startRelay(server);
+		return startRelay(server, reloaded, true);
 	}
 
 	private void publishMessage(MessageType type, ServerPlayer sender, String text) {

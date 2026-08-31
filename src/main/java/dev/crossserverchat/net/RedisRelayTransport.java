@@ -12,9 +12,11 @@ import redis.clients.jedis.exceptions.JedisException;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -26,12 +28,17 @@ import static dev.crossserverchat.CrossServerChatConstants.REDIS_CHANNEL;
  * them; Redis authentication only controls access to the channel.
  */
 public final class RedisRelayTransport implements RelayTransport {
+	private static final int BLOCKING_START_TIMEOUT_SECONDS = 10;
+
 	private final RelayConfig config;
 	private final Logger logger;
 	private final MessageCodec codec;
 	private final Consumer<RelayMessage> remoteMessageConsumer;
 	private final RecentMessageCache recentMessages = new RecentMessageCache();
 	private final AtomicBoolean running = new AtomicBoolean();
+	private final AtomicBoolean connected = new AtomicBoolean();
+	private final CountDownLatch initialConnection = new CountDownLatch(1);
+	private final Object connectionStateLock = new Object();
 	private final ExecutorService writer = Executors.newSingleThreadExecutor(
 			Thread.ofPlatform().daemon().name("cross-server-chat-redis-writer").factory()
 	);
@@ -51,19 +58,37 @@ public final class RedisRelayTransport implements RelayTransport {
 	}
 
 	@Override
-	public void start() {
-		if (!running.compareAndSet(false, true)) {
+	public void start(boolean blocking) throws IOException {
+		if (running.compareAndSet(false, true)) {
+			subscriberWorker = Thread.ofPlatform()
+					.daemon()
+					.name("cross-server-chat-redis-subscriber")
+					.start(this::subscriptionLoop);
+		}
+
+		if (!blocking) {
 			return;
 		}
-		subscriberWorker = Thread.ofPlatform()
-				.daemon()
-				.name("cross-server-chat-redis-subscriber")
-				.start(this::subscriptionLoop);
+
+		try {
+			if (!initialConnection.await(BLOCKING_START_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+				throw new IOException("Timed out after " + BLOCKING_START_TIMEOUT_SECONDS
+						+ " seconds waiting for the Redis subscription");
+			}
+		} catch (InterruptedException exception) {
+			Thread.currentThread().interrupt();
+			throw new IOException("Interrupted while waiting for the Redis subscription", exception);
+		}
+	}
+
+	@Override
+	public boolean connected() {
+		return connected.get();
 	}
 
 	@Override
 	public void publish(MessageType type, UUID playerId, String playerName, String text) {
-		if (!running.get()) {
+		if (!connected()) {
 			return;
 		}
 
@@ -77,6 +102,10 @@ public final class RedisRelayTransport implements RelayTransport {
 	}
 
 	private void send(RelayMessage message) {
+		if (!connected()) {
+			return;
+		}
+
 		try {
 			Jedis current = publisher;
 			if (current == null) {
@@ -103,6 +132,7 @@ public final class RedisRelayTransport implements RelayTransport {
 							exception.getMessage(), config.reconnectDelaySeconds());
 				}
 			} finally {
+				markDisconnected();
 				subscriber = null;
 			}
 
@@ -157,7 +187,11 @@ public final class RedisRelayTransport implements RelayTransport {
 
 	@Override
 	public void close() {
-		boolean wasRunning = running.getAndSet(false);
+		boolean wasRunning;
+		synchronized (connectionStateLock) {
+			wasRunning = running.getAndSet(false);
+			connected.set(false);
+		}
 
 		Jedis currentSubscriber = subscriber;
 		subscriber = null;
@@ -184,6 +218,12 @@ public final class RedisRelayTransport implements RelayTransport {
 		}
 	}
 
+	private void markDisconnected() {
+		synchronized (connectionStateLock) {
+			connected.set(false);
+		}
+	}
+
 	private final class RedisListener extends JedisPubSub {
 		@Override
 		public void onMessage(String channel, String message) {
@@ -192,6 +232,13 @@ public final class RedisRelayTransport implements RelayTransport {
 
 		@Override
 		public void onSubscribe(String channel, int subscribedChannels) {
+			synchronized (connectionStateLock) {
+				if (!running.get()) {
+					return;
+				}
+				connected.set(true);
+				initialConnection.countDown();
+			}
 			logger.info("Connected to Redis {}:{} and subscribed to '{}'",
 					config.redisHost(), config.redisPort(), channel);
 		}

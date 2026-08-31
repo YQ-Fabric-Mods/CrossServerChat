@@ -27,7 +27,7 @@ public final class CrossServerChatCommand {
 		try {
 			if (!reloadHandler.reload(source.getServer())) {
 				source.sendFailure(Component.literal(
-						"CrossServerChat configuration reloaded, but the relay could not be started. Check the server log."
+						"CrossServerChat configuration could not be applied. The previous relay was left unchanged. Check the server log."
 				));
 				return 0;
 			}

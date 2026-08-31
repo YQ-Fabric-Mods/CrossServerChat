@@ -18,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RedisRelayNetworkTest {
@@ -48,16 +49,19 @@ class RedisRelayNetworkTest {
 		);
 
 		try {
-			first.start();
-			second.start();
+			first.start(false);
+			second.start(true);
+			assertTrue(second.connected());
 
-			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
-			while (receivedMessage.getCount() != 0 && System.nanoTime() < deadline) {
-				first.publish(MessageType.PLAYER_CHAT, UUID.randomUUID(), "Alex", "network test");
-				Thread.sleep(100);
+			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+			while (!first.connected() && System.nanoTime() < deadline) {
+				Thread.sleep(10);
 			}
+			assertTrue(first.connected(), "asynchronously started transport did not connect");
 
-			assertTrue(receivedMessage.await(0, TimeUnit.MILLISECONDS), "second server did not receive the message");
+			first.publish(MessageType.PLAYER_CHAT, UUID.randomUUID(), "Alex", "network test");
+
+			assertTrue(receivedMessage.await(5, TimeUnit.SECONDS), "second server did not receive the message");
 			assertEquals("survival", received.get().server());
 			assertEquals(MessageType.PLAYER_CHAT, received.get().type());
 			assertEquals("Alex", received.get().playerName());
@@ -65,6 +69,8 @@ class RedisRelayNetworkTest {
 		} finally {
 			first.close();
 			second.close();
+			assertFalse(first.connected());
+			assertFalse(second.connected());
 			redis.stop();
 		}
 	}

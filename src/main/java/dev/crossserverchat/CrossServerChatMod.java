@@ -3,8 +3,7 @@ package dev.crossserverchat;
 import dev.crossserverchat.command.CrossServerChatCommand;
 import dev.crossserverchat.config.RelayConfig;
 import dev.crossserverchat.config.RelayConfigManager;
-import dev.crossserverchat.net.RelayClient;
-import dev.crossserverchat.net.RelayHost;
+import dev.crossserverchat.net.RedisRelayTransport;
 import dev.crossserverchat.net.RelayTransport;
 import dev.crossserverchat.protocol.MessageType;
 import dev.crossserverchat.protocol.RelayMessage;
@@ -24,6 +23,7 @@ import java.io.IOException;
 
 public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	public static final String MOD_ID = "crossserverchat";
+	public static final String REDIS_CHANNEL = "CrossServerChat_Message";
 	private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	private RelayConfig config;
@@ -64,21 +64,21 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	}
 
 	private boolean startRelay(MinecraftServer server) {
-		if (config.mode() == RelayConfig.Mode.DISABLED) {
+		if (!config.enabled()) {
 			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
 			return true;
 		}
 
-		RelayTransport newTransport = switch (config.mode()) {
-			case HOST -> new RelayHost(config, LOGGER, message -> showRemoteMessage(server, message));
-			case CLIENT -> new RelayClient(config, LOGGER, message -> showRemoteMessage(server, message));
-			case DISABLED -> throw new IllegalStateException("Unreachable mode");
-		};
+		RelayTransport newTransport = new RedisRelayTransport(
+				config,
+				LOGGER,
+				message -> showRemoteMessage(server, message)
+		);
 
 		try {
 			newTransport.start();
 			transport = newTransport;
-			LOGGER.info("CrossServerChat started in {} mode as '{}'", config.mode(), config.serverName());
+			LOGGER.info("CrossServerChat started as '{}'", config.serverName());
 			return true;
 		} catch (IOException exception) {
 			newTransport.close();

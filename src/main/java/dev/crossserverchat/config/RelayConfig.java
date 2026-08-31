@@ -20,11 +20,10 @@ import java.util.Base64;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
- * The intentionally small configuration shared by host and client modes.
+ * The intentionally small configuration shared by every relay node.
  */
 public final class RelayConfig {
 	private static final Gson GSON = new GsonBuilder()
@@ -34,11 +33,12 @@ public final class RelayConfig {
 	private static final Yaml YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
 	private int version = RelayConfigMigrator.CURRENT_VERSION;
-	private String mode = "disabled";
+	private boolean enabled;
 	private String serverName = "server-1";
-	private String bindAddress = "0.0.0.0";
-	private String host = "127.0.0.1";
-	private int port = 8192;
+	private String redisHost = "127.0.0.1";
+	private int redisPort = 6379;
+	private String redisUsername = "default";
+	private String redisPassword = "";
 	private String sharedSecret = "";
 	private EnumMap<MessageType, MessageRelay> messageRelay = defaultMessageRelay();
 	private int connectTimeoutSeconds = 5;
@@ -93,11 +93,12 @@ public final class RelayConfig {
 	private static RelayConfig fromValues(Map<String, Object> values) throws IOException {
 		RelayConfig config = new RelayConfig();
 		config.version = requiredInteger(values, "version");
-		config.mode = string(values, "mode", config.mode);
+		config.enabled = bool(values, "enabled", config.enabled);
 		config.serverName = string(values, "serverName", config.serverName);
-		config.bindAddress = string(values, "bindAddress", config.bindAddress);
-		config.host = string(values, "host", config.host);
-		config.port = integer(values, "port", config.port);
+		config.redisHost = string(values, "redisHost", config.redisHost);
+		config.redisPort = integer(values, "redisPort", config.redisPort);
+		config.redisUsername = string(values, "redisUsername", config.redisUsername);
+		config.redisPassword = string(values, "redisPassword", config.redisPassword);
 		config.sharedSecret = string(values, "sharedSecret", config.sharedSecret);
 		config.messageRelay = messageRelay(values.get("message-relay"));
 		config.connectTimeoutSeconds = integer(values, "connectTimeoutSeconds", config.connectTimeoutSeconds);
@@ -180,6 +181,13 @@ public final class RelayConfig {
 		throw new IOException(key + " must be an integer");
 	}
 
+	private static boolean bool(Map<String, Object> values, String key, boolean defaultValue) throws IOException {
+		Object value = values.get(key);
+		if (value == null) return defaultValue;
+		if (value instanceof Boolean bool) return bool;
+		throw new IOException(key + " must be true or false");
+	}
+
 	private static int requiredInteger(Map<String, Object> values, String key) throws IOException {
 		if (!values.containsKey(key)) {
 			throw new IOException(key + " is required");
@@ -190,18 +198,18 @@ public final class RelayConfig {
 	private void save(Path path) throws IOException {
 		Files.createDirectories(path.getParent());
 		String content = """
-				# Mode: disabled, host, or client.
-				mode: %s
+				# Enables Redis-backed cross-server chat on this server.
+				enabled: %s
 				# Unique name used to identify this Minecraft server in relayed messages.
 				serverName: %s
-				# Network address the host mode listens on.
-				bindAddress: %s
-				# Address of the relay host used by client mode.
-				host: %s
-				# TCP port used by the relay host and all clients.
-				port: %d
+				# Redis connection. Keep Redis on a trusted private network; TLS is not used.
+				redisHost: %s
+				redisPort: %d
+				# Redis ACL username. Use "default" for password-only authentication.
+				redisUsername: %s
+				redisPassword: %s
 				# Shared secret used to encrypt relay traffic.
-				# Use the same value with its host on the client servers.
+				# Use the same value on every CrossServerChat server in this network.
 				sharedSecret: %s
 				# Remote message display rules on this server.
 				# MiniMessage format. Available placeholders: %%server%%, %%player%%, %%message%%.
@@ -218,19 +226,20 @@ public final class RelayConfig {
 				  # Displays remote player death messages.
 				  - player-death: %s
 				    messageFormat: %s
-				# Maximum time in seconds a client waits while connecting to the host.
+				# Maximum time in seconds a Redis connection attempt may take.
 				connectTimeoutSeconds: %d
-				# Delay in seconds before a disconnected client attempts to reconnect.
+				# Delay in seconds before a disconnected subscriber attempts to reconnect.
 				reconnectDelaySeconds: %d
 				
 				# Do not change this number.
 				version: %d
 				""".formatted(
-				quote(mode),
+				enabled,
 				quote(serverName),
-				quote(bindAddress),
-				quote(host),
-				port,
+				quote(redisHost),
+				redisPort,
+				quote(redisUsername),
+				quote(redisPassword),
 				quote(sharedSecret),
 				state(MessageType.PLAYER_CHAT),
 				quote(messageRelay.get(MessageType.PLAYER_CHAT).messageFormat()),
@@ -266,10 +275,9 @@ public final class RelayConfig {
 	}
 
 	private void applyDefaults() {
-		if (mode == null || mode.isBlank()) mode = "disabled";
 		if (serverName == null || serverName.isBlank()) serverName = "server-1";
-		if (bindAddress == null || bindAddress.isBlank()) bindAddress = "0.0.0.0";
-		if (host == null || host.isBlank()) host = "127.0.0.1";
+		if (redisHost == null || redisHost.isBlank()) redisHost = "127.0.0.1";
+		if (redisUsername == null) redisUsername = "default";
 	}
 
 	private void validate() throws IOException {
@@ -277,13 +285,8 @@ public final class RelayConfig {
 			throw new IOException("Unsupported configuration version " + version
 					+ "; expected " + RelayConfigMigrator.CURRENT_VERSION);
 		}
-		try {
-			Mode.valueOf(mode.toUpperCase(Locale.ROOT));
-		} catch (IllegalArgumentException exception) {
-			throw new IOException("mode must be disabled, host, or client");
-		}
-		if (port < 1 || port > 65535) {
-			throw new IOException("port must be between 1 and 65535");
+		if (redisPort < 1 || redisPort > 65535) {
+			throw new IOException("redisPort must be between 1 and 65535");
 		}
 		if (serverName.length() > 64 || containsLineBreak(serverName)) {
 			throw new IOException("serverName must be at most 64 characters and one line");
@@ -300,7 +303,13 @@ public final class RelayConfig {
 		if (reconnectDelaySeconds < 1 || reconnectDelaySeconds > 300) {
 			throw new IOException("reconnectDelaySeconds must be between 1 and 300");
 		}
-		if (mode() != Mode.DISABLED && (sharedSecret == null || sharedSecret.length() < 32)) {
+		if (enabled && (redisPassword == null || redisPassword.isBlank())) {
+			throw new IOException("redisPassword must be non-blank when CrossServerChat is enabled");
+		}
+		if (redisUsername.isBlank() || redisUsername.length() > 128 || containsLineBreak(redisUsername)) {
+			throw new IOException("redisUsername must be non-blank, at most 128 characters, and one line");
+		}
+		if (enabled && (sharedSecret == null || sharedSecret.length() < 32)) {
 			throw new IOException("sharedSecret must contain at least 32 characters");
 		}
 	}
@@ -332,12 +341,8 @@ public final class RelayConfig {
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
 	}
 
-	public Mode mode() {
-		try {
-			return Mode.valueOf(mode.toUpperCase(Locale.ROOT));
-		} catch (IllegalArgumentException exception) {
-			return Mode.DISABLED;
-		}
+	public boolean enabled() {
+		return enabled;
 	}
 
 	public int version() {
@@ -348,16 +353,20 @@ public final class RelayConfig {
 		return serverName;
 	}
 
-	public String bindAddress() {
-		return bindAddress;
+	public String redisHost() {
+		return redisHost;
 	}
 
-	public String host() {
-		return host;
+	public int redisPort() {
+		return redisPort;
 	}
 
-	public int port() {
-		return port;
+	public String redisUsername() {
+		return redisUsername;
+	}
+
+	public String redisPassword() {
+		return redisPassword;
 	}
 
 	public String sharedSecret() {
@@ -374,12 +383,6 @@ public final class RelayConfig {
 
 	public int reconnectDelaySeconds() {
 		return reconnectDelaySeconds;
-	}
-
-	public enum Mode {
-		DISABLED,
-		HOST,
-		CLIENT
 	}
 
 	public record MessageRelay(boolean enabled, String messageFormat) {

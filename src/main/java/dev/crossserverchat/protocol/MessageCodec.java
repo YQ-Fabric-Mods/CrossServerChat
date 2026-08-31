@@ -9,6 +9,8 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -17,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 
 /**
  * Encrypts UTF-8 JSON using AES-256-GCM, then wraps it in a four-byte length
@@ -59,6 +62,28 @@ public final class MessageCodec {
 		output.write(nonce);
 		output.write(ciphertext);
 		output.flush();
+	}
+
+	public String encodeBase64(RelayMessage message) throws IOException {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		write(new DataOutputStream(bytes), message);
+		return Base64.getEncoder().encodeToString(bytes.toByteArray());
+	}
+
+	public RelayMessage decodeBase64(String payload) throws IOException {
+		byte[] bytes;
+		try {
+			bytes = Base64.getDecoder().decode(payload);
+		} catch (IllegalArgumentException exception) {
+			throw new IOException("Invalid CrossServerChat Base64 payload", exception);
+		}
+
+		ByteArrayInputStream input = new ByteArrayInputStream(bytes);
+		RelayMessage message = read(new DataInputStream(input));
+		if (input.available() != 0) {
+			throw new IOException("CrossServerChat payload contains trailing data");
+		}
+		return message;
 	}
 
 	public RelayMessage read(DataInputStream input) throws IOException {

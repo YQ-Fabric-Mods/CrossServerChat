@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 final class RelayConfigMigrator {
-	static final int CURRENT_VERSION = 3;
+	static final int CURRENT_VERSION = 5;
 
 	private RelayConfigMigrator() {
 	}
@@ -25,11 +25,31 @@ final class RelayConfigMigrator {
 		while (version < CURRENT_VERSION) {
 			switch (version) {
 				case 2 -> migrateV2ToV3(values);
+				case 3 -> migrateV3ToV4(values);
+				case 4 -> migrateV4ToV5(values);
 				default -> throw new IOException("Unsupported configuration version " + version);
 			}
 			version = version(values);
 		}
 		return originalVersion != version;
+	}
+
+	private static void migrateV4ToV5(Map<String, Object> values) {
+		values.remove("redisChannel");
+		values.put("version", 5);
+	}
+
+	private static void migrateV3ToV4(Map<String, Object> values) {
+		values.remove("mode");
+		values.remove("bindAddress");
+		values.remove("host");
+		values.remove("port");
+		values.put("enabled", false);
+		values.put("redisHost", "127.0.0.1");
+		values.put("redisPort", 6379);
+		values.put("redisUsername", "default");
+		values.put("redisPassword", "");
+		values.put("version", 4);
 	}
 
 	private static void migrateV2ToV3(Map<String, Object> values) throws IOException {

@@ -33,6 +33,29 @@ class MessageCodecTest {
 	}
 
 	@Test
+	void roundTripsAnEncryptedBase64Payload() throws IOException {
+		RelayMessage expected = RelayMessage.create(
+				MessageType.PLAYER_CHAT, "survival", UUID.randomUUID(), "Alex", "Redis payload"
+		);
+
+		assertEquals(expected, codec.decodeBase64(codec.encodeBase64(expected)));
+	}
+
+	@Test
+	void rejectsTrailingBase64Data() throws IOException {
+		RelayMessage message = RelayMessage.create(
+				MessageType.PLAYER_CHAT, "survival", UUID.randomUUID(), "Alex", "Redis payload"
+		);
+		String payload = codec.encodeBase64(message);
+		byte[] bytes = java.util.Base64.getDecoder().decode(payload);
+		byte[] withTrailingData = Arrays.copyOf(bytes, bytes.length + 1);
+
+		assertThrows(IOException.class, () -> codec.decodeBase64(
+				java.util.Base64.getEncoder().encodeToString(withTrailingData)
+		));
+	}
+
+	@Test
 	void usesAFreshNonceForEveryFrame() throws IOException {
 		RelayMessage message = RelayMessage.create(
 				MessageType.PLAYER_CHAT, "creative", UUID.randomUUID(), "Steve", "same plaintext"

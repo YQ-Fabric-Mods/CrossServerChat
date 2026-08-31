@@ -9,11 +9,6 @@ import javax.crypto.Mac;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -22,21 +17,21 @@ import java.util.Arrays;
 import java.util.Base64;
 
 /**
- * Encrypts UTF-8 JSON using AES-256-GCM, then wraps it in a four-byte length
- * prefix. The shared secret is converted to an AES key with HKDF-SHA256.
+ * Encrypts UTF-8 JSON using AES-256-GCM. The shared secret is converted to an
+ * AES key with HKDF-SHA256.
  */
 public final class MessageCodec {
 	static final int MAX_FRAME_BYTES = 16 * 1024;
 	static final int NONCE_BYTES = 12;
 	private static final int GCM_TAG_BITS = 128;
 	private static final int GCM_TAG_BYTES = GCM_TAG_BITS / 8;
-	private static final byte WIRE_VERSION = 4;
+	private static final byte WIRE_VERSION = 5;
 	private static final byte[] HKDF_SALT =
-			"crossserverchat/hkdf-salt/v4".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/hkdf-salt/v5".getBytes(StandardCharsets.UTF_8);
 	private static final byte[] HKDF_INFO =
-			"crossserverchat/aes-256-gcm/v4".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/aes-256-gcm/v5".getBytes(StandardCharsets.UTF_8);
 	private static final byte[] AAD =
-			"crossserverchat/frame/v4".getBytes(StandardCharsets.UTF_8);
+			"crossserverchat/frame/v5".getBytes(StandardCharsets.UTF_8);
 	private static final Gson GSON = new Gson();
 	private static final SecureRandom RANDOM = new SecureRandom();
 	private final SecretKey encryptionKey;
@@ -45,7 +40,7 @@ public final class MessageCodec {
 		encryptionKey = new SecretKeySpec(hkdfSha256(sharedSecret), "AES");
 	}
 
-	public void write(DataOutputStream output, RelayMessage message) throws IOException {
+	public String encodeBase64(RelayMessage message) throws IOException {
 		byte[] plaintext = GSON.toJson(message).getBytes(StandardCharsets.UTF_8);
 		if (plaintext.length == 0
 				|| plaintext.length + 1 + NONCE_BYTES + GCM_TAG_BYTES > MAX_FRAME_BYTES) {
@@ -55,19 +50,11 @@ public final class MessageCodec {
 		byte[] nonce = new byte[NONCE_BYTES];
 		RANDOM.nextBytes(nonce);
 		byte[] ciphertext = crypt(Cipher.ENCRYPT_MODE, nonce, plaintext);
-		int frameLength = 1 + nonce.length + ciphertext.length;
-
-		output.writeInt(frameLength);
-		output.writeByte(WIRE_VERSION);
-		output.write(nonce);
-		output.write(ciphertext);
-		output.flush();
-	}
-
-	public String encodeBase64(RelayMessage message) throws IOException {
-		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-		write(new DataOutputStream(bytes), message);
-		return Base64.getEncoder().encodeToString(bytes.toByteArray());
+		byte[] frame = new byte[1 + nonce.length + ciphertext.length];
+		frame[0] = WIRE_VERSION;
+		System.arraycopy(nonce, 0, frame, 1, nonce.length);
+		System.arraycopy(ciphertext, 0, frame, 1 + nonce.length, ciphertext.length);
+		return Base64.getEncoder().encodeToString(frame);
 	}
 
 	public RelayMessage decodeBase64(String payload) throws IOException {
@@ -78,30 +65,15 @@ public final class MessageCodec {
 			throw new IOException("Invalid CrossServerChat Base64 payload", exception);
 		}
 
-		ByteArrayInputStream input = new ByteArrayInputStream(bytes);
-		RelayMessage message = read(new DataInputStream(input));
-		if (input.available() != 0) {
-			throw new IOException("CrossServerChat payload contains trailing data");
+		if (bytes.length < 1 + NONCE_BYTES + GCM_TAG_BYTES || bytes.length > MAX_FRAME_BYTES) {
+			throw new IOException("Invalid CrossServerChat frame length: " + bytes.length);
 		}
-		return message;
-	}
-
-	public RelayMessage read(DataInputStream input) throws IOException {
-		int length = input.readInt();
-		if (length < 1 + NONCE_BYTES + GCM_TAG_BYTES || length > MAX_FRAME_BYTES) {
-			throw new IOException("Invalid CrossServerChat frame length: " + length);
-		}
-
-		byte[] frame = input.readNBytes(length);
-		if (frame.length != length) {
-			throw new EOFException("CrossServerChat connection closed during a frame");
-		}
-		if (frame[0] != WIRE_VERSION) {
+		if (bytes[0] != WIRE_VERSION) {
 			throw new IOException("Unsupported encrypted CrossServerChat frame version");
 		}
 
-		byte[] nonce = Arrays.copyOfRange(frame, 1, 1 + NONCE_BYTES);
-		byte[] ciphertext = Arrays.copyOfRange(frame, 1 + NONCE_BYTES, frame.length);
+		byte[] nonce = Arrays.copyOfRange(bytes, 1, 1 + NONCE_BYTES);
+		byte[] ciphertext = Arrays.copyOfRange(bytes, 1 + NONCE_BYTES, bytes.length);
 		byte[] plaintext = crypt(Cipher.DECRYPT_MODE, nonce, ciphertext);
 
 		try {

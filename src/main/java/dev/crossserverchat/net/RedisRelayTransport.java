@@ -18,7 +18,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
-import static dev.crossserverchat.CrossServerChatMod.REDIS_CHANNEL;
+import static dev.crossserverchat.CrossServerChatConstants.REDIS_CHANNEL;
 
 /**
  * Symmetric Redis Pub/Sub transport. Every Minecraft server publishes and

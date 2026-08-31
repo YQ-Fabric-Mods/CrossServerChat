@@ -21,9 +21,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import static dev.crossserverchat.CrossServerChatConstants.MOD_ID;
+
 public final class CrossServerChatMod implements DedicatedServerModInitializer {
-	public static final String MOD_ID = "crossserverchat";
-	public static final String REDIS_CHANNEL = "CrossServerChat_Message";
 	private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
 	private RelayConfig config;

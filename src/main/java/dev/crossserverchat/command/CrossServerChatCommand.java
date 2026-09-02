@@ -27,13 +27,15 @@ public final class CrossServerChatCommand {
 		try {
 			if (!reloadHandler.reload(source.getServer())) {
 				source.sendFailure(Component.literal(
-						"CrossServerChat configuration could not be applied. The previous relay was left unchanged. Check the server log."
+						"CrossServerChat configuration could not be applied. The relay remains stopped; check the server log and reload again."
 				));
 				return 0;
 			}
 		} catch (IOException exception) {
 			logger.error("Could not reload CrossServerChat configuration", exception);
-			source.sendFailure(Component.literal("CrossServerChat configuration reload failed: " + exception.getMessage()));
+			source.sendFailure(Component.literal(
+					"CrossServerChat configuration reload failed; the relay remains stopped: " + exception.getMessage()
+			));
 			return 0;
 		}
 

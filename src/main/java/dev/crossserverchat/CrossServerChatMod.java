@@ -64,9 +64,9 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	}
 
 	private boolean startRelay(MinecraftServer server, RelayConfig newConfig, boolean blocking) {
+		config = newConfig;
 		if (!newConfig.enabled()) {
 			stopRelay();
-			config = newConfig;
 			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
 			return true;
 		}
@@ -79,12 +79,7 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 
 		try {
 			newTransport.start(blocking);
-			RelayTransport oldTransport = transport;
-			config = newConfig;
 			transport = newTransport;
-			if (oldTransport != null) {
-				oldTransport.close();
-			}
 			if (blocking) {
 				LOGGER.info("CrossServerChat started as '{}'", newConfig.serverName());
 			} else {
@@ -99,6 +94,7 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	}
 
 	private boolean reload(MinecraftServer server) throws IOException {
+		stopRelay();
 		RelayConfig reloaded = configManager.load();
 		return startRelay(server, reloaded, true);
 	}

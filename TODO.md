@@ -3,4 +3,4 @@
 - [ ] 适配Neoforge & 低版本
 - [ ] i18n
 - [ ] 修正README，文档与README分开
-- [X] 明确 RelayTransport 启动与重载的成功语义：开服异步连接，重载同步等待；新连接失败时保留旧连接
+- [ ] redis TLS？

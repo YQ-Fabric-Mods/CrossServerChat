@@ -8,9 +8,9 @@
 
 ## Redis 部署
 
-需要 Redis 7.2 或更高版本。Pub/Sub 不需要持久化，建议使用独立 Redis 实例并关闭 RDB/AOF。
+需要 Redis 7.4 或更高版本。
 
-以下是最小 `redis.conf` 示例：
+以下是 `redis.conf` 示例：
 
 ```conf
 bind 0.0.0.0
@@ -36,13 +36,6 @@ services:
     ports:
       - "6379:6379"
 ```
-
-本项目不使用 Redis TLS，因此：
-
-- 不要把 `6379` 直接暴露到公网
-- 只允许 Minecraft 服务器通过内网、防火墙或 VPN 访问 Redis
-- Redis ACL 密码会以明文经过网络；AES-GCM 只保护聊天消息，不保护 Redis 登录凭据
-- Redis ACL 必须允许访问 MOD 固定使用的频道 `CrossServerChat:Message`
 
 ## 配置文件
 
@@ -92,14 +85,10 @@ version: 5
 - 每一项可设为 `enabled` 或 `disabled`
 - 每项的 `messageFormat` 均支持 `%server%`、`%player%` 和 `%message%`
 - `player-death` 的 `%message%` 是原版死亡消息；`player-join` 和 `player-leave` 的 `%message%` 为空
-- `redisPassword` 必须与 Redis ACL 匹配；Redis 频道固定为 `CrossServerChat:Message`，不可配置
 - 所有节点的 `sharedSecret` 必须相同，`serverName` 必须不同
 - `sharedSecret` 启用前请替换为至少 32 字符的随机密码
-- Redis Pub/Sub 是至多一次投递：节点断线期间的消息不会补发
 
 修改配置后，可执行 `/crossserverchat reload` 命令重载配置，无需重启服务器。
-
-从 v3 升级时，旧配置会自动迁移到 v5 并设置 `enabled: false`。部署 Redis、填写新配置后再手动启用，避免把旧 relay 地址误当作 Redis 地址。已有 v4 配置升级后会自动移除 `redisChannel`。
 
 ### 消息格式自定义
 

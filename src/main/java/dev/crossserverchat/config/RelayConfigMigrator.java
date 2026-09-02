@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 final class RelayConfigMigrator {
-	static final int CURRENT_VERSION = 5;
+	static final int CURRENT_VERSION = 6;
 
 	private RelayConfigMigrator() {
 	}
@@ -27,11 +27,20 @@ final class RelayConfigMigrator {
 				case 2 -> migrateV2ToV3(values);
 				case 3 -> migrateV3ToV4(values);
 				case 4 -> migrateV4ToV5(values);
+				case 5 -> migrateV5ToV6(values);
 				default -> throw new IOException("Unsupported configuration version " + version);
 			}
 			version = version(values);
 		}
 		return originalVersion != version;
+	}
+
+	private static void migrateV5ToV6(Map<String, Object> values) {
+		Map<String, Object> playerListSync = new LinkedHashMap<>();
+		playerListSync.put("enabled", true);
+		playerListSync.put("displayFormat", "%player% <green>[%server%]</green>");
+		values.put("player-list-sync", playerListSync);
+		values.put("version", 6);
 	}
 
 	private static void migrateV4ToV5(Map<String, Object> values) {

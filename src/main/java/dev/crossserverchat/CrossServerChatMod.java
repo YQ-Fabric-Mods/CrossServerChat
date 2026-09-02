@@ -3,8 +3,7 @@ package dev.crossserverchat;
 import dev.crossserverchat.command.CrossServerChatCommand;
 import dev.crossserverchat.config.RelayConfig;
 import dev.crossserverchat.config.RelayConfigManager;
-import dev.crossserverchat.net.RedisRelayTransport;
-import dev.crossserverchat.net.RelayTransport;
+import dev.crossserverchat.net.RedisRelayManager;
 import dev.crossserverchat.protocol.MessageType;
 import dev.crossserverchat.protocol.RelayMessage;
 import net.fabricmc.api.DedicatedServerModInitializer;
@@ -16,6 +15,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.kyori.adventure.platform.modcommon.MinecraftServerAudiences;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,31 +27,49 @@ import static dev.crossserverchat.CrossServerChatConstants.MOD_ID;
 public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-	private RelayConfig config;
+	private RelayConfig initialConfig;
 	private RelayConfigManager configManager;
-	private volatile RelayTransport transport;
+	private volatile RedisRelayManager relayManager;
 
 	@Override
 	public void onInitializeServer() {
 		configManager = new RelayConfigManager(FabricLoader.getInstance().getConfigDir(), LOGGER);
 		try {
-			config = configManager.load();
+			initialConfig = configManager.load();
 		} catch (IOException exception) {
-			LOGGER.error("CrossServerChat is disabled because its configuration could not be loaded", exception);
-			return;
+			LOGGER.error("CrossServerChat is stopped because its configuration could not be loaded; fix it and run /crossserverchat reload", exception);
 		}
 
-		ServerLifecycleEvents.SERVER_STARTED.register(server -> startRelay(server, config, false));
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+			RedisRelayManager manager = new RedisRelayManager(
+					server,
+					configManager,
+					LOGGER,
+					(relay, message) -> showRemoteMessage(server, relay, message)
+			);
+			relayManager = manager;
+			if (initialConfig != null) {
+				manager.start(initialConfig);
+			}
+		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> stopRelay());
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, boundChatType) ->
 				publishMessage(MessageType.PLAYER_CHAT, sender, message.decoratedContent().getString())
 		);
-		ServerPlayConnectionEvents.JOIN.register((listener, packetSender, server) ->
-				publishMessage(MessageType.PLAYER_JOIN, listener.getPlayer(), "")
-		);
-		ServerPlayConnectionEvents.DISCONNECT.register((listener, server) ->
-				publishMessage(MessageType.PLAYER_LEAVE, listener.getPlayer(), "")
-		);
+		ServerPlayConnectionEvents.JOIN.register((listener, packetSender, server) -> {
+			publishMessage(MessageType.PLAYER_JOIN, listener.getPlayer(), "");
+			RedisRelayManager manager = relayManager;
+			if (manager != null) {
+				manager.playerJoined(listener.getPlayer());
+			}
+		});
+		ServerPlayConnectionEvents.DISCONNECT.register((listener, server) -> {
+			publishMessage(MessageType.PLAYER_LEAVE, listener.getPlayer(), "");
+			RedisRelayManager manager = relayManager;
+			if (manager != null) {
+				manager.playerDisconnected(listener.getPlayer());
+			}
+		});
 		ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
 			if (entity instanceof ServerPlayer player) {
 				publishMessage(
@@ -60,47 +79,25 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 				);
 			}
 		});
-		CrossServerChatCommand.register(this::reload, LOGGER);
+		CrossServerChatCommand.register(this::reload);
 	}
 
-	private boolean startRelay(MinecraftServer server, RelayConfig newConfig, boolean blocking) {
-		config = newConfig;
-		if (!newConfig.enabled()) {
-			stopRelay();
-			LOGGER.info("CrossServerChat is disabled. Edit config/cross-server-chat.yaml and restart to enable it.");
-			return true;
-		}
-
-		RelayTransport newTransport = new RedisRelayTransport(
-				newConfig,
-				LOGGER,
-				message -> showRemoteMessage(server, message)
-		);
-
-		try {
-			newTransport.start(blocking);
-			transport = newTransport;
-			if (blocking) {
-				LOGGER.info("CrossServerChat started as '{}'", newConfig.serverName());
-			} else {
-				LOGGER.info("CrossServerChat is connecting as '{}'", newConfig.serverName());
-			}
-			return true;
-		} catch (IOException exception) {
-			newTransport.close();
-			LOGGER.error("Could not start CrossServerChat", exception);
+	private boolean reload(CommandSourceStack source) {
+		RedisRelayManager manager = relayManager;
+		if (manager == null) {
 			return false;
 		}
-	}
-
-	private boolean reload(MinecraftServer server) throws IOException {
-		stopRelay();
-		RelayConfig reloaded = configManager.load();
-		return startRelay(server, reloaded, true);
+		return manager.requestReload(result -> source.getServer().execute(() -> {
+			if (result.success()) {
+				source.sendSuccess(() -> Component.literal(result.message()), false);
+			} else {
+				source.sendFailure(Component.literal(result.message()));
+			}
+		}));
 	}
 
 	private void publishMessage(MessageType type, ServerPlayer sender, String text) {
-		RelayTransport current = transport;
+		RedisRelayManager current = relayManager;
 		if (current == null) {
 			return;
 		}
@@ -115,14 +112,14 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 		current.publish(type, sender.getUUID(), sender.getName().getString(), oneLine);
 	}
 
-	private void showRemoteMessage(MinecraftServer server, RelayMessage message) {
+	private void showRemoteMessage(
+			MinecraftServer server,
+			RelayConfig.MessageRelay relay,
+			RelayMessage message
+	) {
 		// Socket callbacks run off-thread. Minecraft state must only be touched
 		// after handing the work back to the server thread.
 		server.execute(() -> {
-			RelayConfig.MessageRelay relay = config.messageRelay(message.type());
-			if (!relay.enabled()) {
-				return;
-			}
 			MinecraftServerAudiences.of(server).players().sendMessage(
 					MessageFormatter.render(relay.messageFormat(), message)
 			);
@@ -130,10 +127,10 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	}
 
 	private void stopRelay() {
-		RelayTransport current = transport;
-		transport = null;
+		RedisRelayManager current = relayManager;
+		relayManager = null;
 		if (current != null) {
-			current.close();
+			current.stop();
 		}
 	}
 }

@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "dev.crossserverchat.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "PlayerInfoPacketAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -84,7 +84,8 @@ class RelayConfigTest {
 				LoggerFactory.getLogger("crossserverchat-config-v4-migration-test")
 		);
 
-		assertEquals(5, config.version());
+		assertEquals(6, config.version());
+		assertTrue(config.playerListSync().enabled());
 		assertFalse(Files.readString(yamlPath).contains("redisChannel"));
 	}
 
@@ -115,7 +116,7 @@ class RelayConfigTest {
 				LoggerFactory.getLogger("crossserverchat-config-migration-test")
 		);
 
-		assertEquals(5, config.version());
+		assertEquals(6, config.version());
 		assertFalse(config.enabled());
 		assertEquals("127.0.0.1", config.redisHost());
 		assertEquals(6379, config.redisPort());

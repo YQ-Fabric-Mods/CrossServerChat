@@ -41,6 +41,7 @@ public final class RelayConfig {
 	private String redisPassword = "";
 	private String sharedSecret = "";
 	private EnumMap<MessageType, MessageRelay> messageRelay = defaultMessageRelay();
+	private PlayerListSync playerListSync = defaultPlayerListSync();
 	private int connectTimeoutSeconds = 5;
 	private int reconnectDelaySeconds = 5;
 
@@ -101,11 +102,29 @@ public final class RelayConfig {
 		config.redisPassword = string(values, "redisPassword", config.redisPassword);
 		config.sharedSecret = string(values, "sharedSecret", config.sharedSecret);
 		config.messageRelay = messageRelay(values.get("message-relay"));
+		config.playerListSync = playerListSync(values.get("player-list-sync"));
 		config.connectTimeoutSeconds = integer(values, "connectTimeoutSeconds", config.connectTimeoutSeconds);
 		config.reconnectDelaySeconds = integer(values, "reconnectDelaySeconds", config.reconnectDelaySeconds);
 		config.applyDefaults();
 		config.validate();
 		return config;
+	}
+
+	private static PlayerListSync playerListSync(Object value) throws IOException {
+		if (!(value instanceof Map<?, ?> settings)) {
+			throw new IOException("player-list-sync must be a mapping");
+		}
+		for (Object key : settings.keySet()) {
+			if (!"enabled".equals(key) && !"displayFormat".equals(key)) {
+				throw new IOException("Unknown field in player-list-sync: " + key);
+			}
+		}
+		Object enabledValue = settings.get("enabled");
+		if (!(enabledValue instanceof Boolean enabled)) {
+			throw new IOException("player-list-sync.enabled is required and must be true or false");
+		}
+		String displayFormat = requiredString(settings, "displayFormat");
+		return new PlayerListSync(enabled, displayFormat);
 	}
 
 	private static EnumMap<MessageType, MessageRelay> messageRelay(Object value) throws IOException {
@@ -226,6 +245,11 @@ public final class RelayConfig {
 				  # Displays remote player death messages.
 				  - player-death: %s
 				    messageFormat: %s
+				# Shows players from other connected servers in the vanilla Tab list.
+				player-list-sync:
+				  enabled: %s
+				  # MiniMessage format. Available placeholders: %%server%%, %%player%%.
+				  displayFormat: %s
 				# Maximum time in seconds a Redis connection attempt may take.
 				connectTimeoutSeconds: %d
 				# Delay in seconds before a disconnected subscriber attempts to reconnect.
@@ -249,6 +273,8 @@ public final class RelayConfig {
 				quote(messageRelay.get(MessageType.PLAYER_LEAVE).messageFormat()),
 				state(MessageType.PLAYER_DEATH),
 				quote(messageRelay.get(MessageType.PLAYER_DEATH).messageFormat()),
+				playerListSync.enabled(),
+				quote(playerListSync.displayFormat()),
 				connectTimeoutSeconds,
 				reconnectDelaySeconds,
 				version
@@ -297,6 +323,9 @@ public final class RelayConfig {
 				throw new IOException(type.configKey() + " messageFormat must be non-blank and one line");
 			}
 		}
+		if (playerListSync.displayFormat().isBlank() || containsLineBreak(playerListSync.displayFormat())) {
+			throw new IOException("player-list-sync.displayFormat must be non-blank and one line");
+		}
 		if (connectTimeoutSeconds < 1 || connectTimeoutSeconds > 60) {
 			throw new IOException("connectTimeoutSeconds must be between 1 and 60");
 		}
@@ -324,6 +353,10 @@ public final class RelayConfig {
 			defaults.put(type, new MessageRelay(true, defaultFormat(type)));
 		}
 		return defaults;
+	}
+
+	private static PlayerListSync defaultPlayerListSync() {
+		return new PlayerListSync(true, "%player% <green>[%server%]</green>");
 	}
 
 	static String defaultFormat(MessageType type) {
@@ -377,6 +410,10 @@ public final class RelayConfig {
 		return messageRelay.get(type);
 	}
 
+	public PlayerListSync playerListSync() {
+		return playerListSync;
+	}
+
 	public int connectTimeoutSeconds() {
 		return connectTimeoutSeconds;
 	}
@@ -386,6 +423,9 @@ public final class RelayConfig {
 	}
 
 	public record MessageRelay(boolean enabled, String messageFormat) {
+	}
+
+	public record PlayerListSync(boolean enabled, String displayFormat) {
 	}
 
 	private record LoadedConfig(RelayConfig config, int originalVersion, boolean migrated) {

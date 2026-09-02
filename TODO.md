@@ -3,4 +3,4 @@
 - [ ] 适配Neoforge & 低版本
 - [ ] i18n
 - [ ] 修正README，文档与README分开
-- [ ] redis TLS？
+- [ ] redis TLS？用户ACL？

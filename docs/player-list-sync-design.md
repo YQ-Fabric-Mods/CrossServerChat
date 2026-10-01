@@ -19,7 +19,7 @@
 - 不允许对远端玩家执行本服命令、传送或交互。
 - 第一版不转发真实游戏模式、队伍、计分板或皮肤纹理。
 - 第一版不专门处理玩家在服务器之间切换时的瞬时重复、缺失或 Player Info 数据包时序问题。
-- 不保证显示超过原版客户端上限的条目。Minecraft 26.2 的 Tab 界面最多渲染 80 个条目，包括本服玩家。
+- 不保证显示超过原版客户端上限的条目。Minecraft 26.3 的 Tab 界面最多渲染 80 个条目，包括本服玩家。
 
 ## 总体设计
 
@@ -301,9 +301,9 @@ new ClientboundPlayerInfoRemovePacket(List.of(uuid))
 
 本服玩家刚加入时，只向该玩家发送当前完整远端视图；远端状态变化时再向所有本服玩家广播差异。
 
-### Minecraft 26.2 Accessor
+### Minecraft 26.3 Accessor
 
-Minecraft 26.2 的 `ClientboundPlayerInfoUpdatePacket.Entry` 构造器公开，但数据包没有接受任意 Entry 集合的公开构造器。需要一个最小 Mixin Accessor 修改构造后数据包的 `entries` 字段：
+Minecraft 26.3 的 `ClientboundPlayerInfoUpdatePacket.Entry` 构造器公开，但数据包没有接受任意 Entry 集合的公开构造器。需要一个最小 Mixin Accessor 修改构造后数据包的 `entries` 字段：
 
 ```java
 @Mixin(ClientboundPlayerInfoUpdatePacket.class)

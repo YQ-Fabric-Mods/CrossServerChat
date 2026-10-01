@@ -6,6 +6,8 @@
 
 纯服务端MOD，客户端无需安装。
 
+当前版本支持 **Minecraft Java 26.3**，需要 **Java 25**、**Fabric Loader 0.19.5 或更高版本**和 **Fabric API 0.161.0+26.3 或更高的 26.3 版本**。Adventure 7.2.0 已内置，无需单独安装。
+
 ## Redis 部署
 
 需要 Redis 7.4 或更高版本。

@@ -1,5 +1,6 @@
 package dev.crossserverchat.net;
 
+import dev.crossserverchat.compat.VanishCompat;
 import dev.crossserverchat.config.RelayConfig;
 import dev.crossserverchat.config.RelayConfigManager;
 import dev.crossserverchat.playerlist.LocalPlayer;
@@ -118,6 +119,11 @@ public final class RedisRelayManager {
 
 	public void playerDisconnected(ServerPlayer player) {
 		submitOrdinary(() -> playerMembershipChanged(player, MembershipChange.REMOVE));
+	}
+
+	public void playerVisibilityChanged() {
+		// Refresh immediately on vanish/un-vanish without pretending the player joined or left.
+		submitOrdinary(() -> playerMembershipChanged(null, MembershipChange.NONE));
 	}
 
 	public boolean requestReload(Consumer<ReloadResult> completion) {
@@ -389,6 +395,7 @@ public final class RedisRelayManager {
 		CompletableFuture<List<LocalPlayer>> result = new CompletableFuture<>();
 		server.execute(() -> {
 			Map<UUID, LocalPlayer> players = new HashMap<>();
+			// Keep every local UUID for collision handling; filter only the exported snapshot.
 			for (ServerPlayer player : server.getPlayerList().getPlayers()) {
 				players.put(player.getUUID(), localPlayer(player));
 			}
@@ -408,7 +415,8 @@ public final class RedisRelayManager {
 		return new LocalPlayer(
 				player.getUUID(),
 				player.getGameProfile().name(),
-				player.connection.latency()
+				player.connection.latency(),
+				VanishCompat.isVanished(player)
 		);
 	}
 
@@ -416,7 +424,7 @@ public final class RedisRelayManager {
 		PlayerListSnapshot snapshot = PlayerListSnapshot.create(
 				serverId,
 				config.serverName(),
-				localPlayers.stream().map(LocalPlayer::toSyncedPlayer).toList()
+				LocalPlayer.toVisibleSyncedPlayers(localPlayers)
 		);
 		PlayerListNotification notification = PlayerListNotification.create(serverId);
 		try (Transaction transaction = command.multi()) {
@@ -496,7 +504,10 @@ public final class RedisRelayManager {
 				return true;
 			}
 			List<String> stored = snapshot.players().stream().map(player -> player.uuid()).toList();
-			List<String> current = localPlayers.stream().map(player -> player.uuid().toString()).toList();
+			// Compare the same visible membership that is written to Redis, including heartbeat recovery.
+			List<String> current = LocalPlayer.toVisibleSyncedPlayers(localPlayers).stream()
+					.map(player -> player.uuid())
+					.toList();
 			return !stored.equals(current);
 		} catch (IOException exception) {
 			return true;

@@ -85,7 +85,7 @@ reconnectDelaySeconds: 5
 version: 6
 ```
 
-- `message-relay` 列表只控制本服是否显示收到的远程消息；发送端始终发送四类事件
+- `message-relay` 列表只控制本服是否显示收到的远程消息；发送端发送四类事件，但不会转发隐身玩家的事件
 - 每一项可设为 `enabled` 或 `disabled`
 - 每项的 `messageFormat` 均支持 `%server%`、`%player%` 和 `%message%`
 - `player-death` 的 `%message%` 是原版死亡消息；`player-join` 和 `player-leave` 的 `%message%` 为空
@@ -95,6 +95,15 @@ version: 6
 - `player-list-sync.displayFormat` 支持 `%server%`、`%player%` 和 MiniMessage 格式
 
 修改配置后，可执行 `/crossserverchat reload` 命令重载配置，无需重启服务器。
+
+### Vanish 兼容
+
+可选兼容 [DrexHD/Vanish](https://github.com/DrexHD/Vanish)，未安装时保持正常的跨服同步行为。
+
+- 隐身玩家不会写入对外同步的玩家列表，对所有远端玩家隐藏，包括远端管理员。
+- 开启或解除隐身时立即请求同步，远端 Tab 列表会相应移除或恢复该玩家；心跳、重连和配置重载也会检查隐身状态。
+- 隐身期间的聊天、进服、退服和死亡事件不会转发，避免通过跨服消息暴露身份。
+- 隐身状态切换只刷新列表，不额外发送跨服进服或退服消息。
 
 ### 消息格式自定义
 

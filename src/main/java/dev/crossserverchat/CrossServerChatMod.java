@@ -1,6 +1,7 @@
 package dev.crossserverchat;
 
 import dev.crossserverchat.command.CrossServerChatCommand;
+import dev.crossserverchat.compat.VanishCompat;
 import dev.crossserverchat.config.RelayConfig;
 import dev.crossserverchat.config.RelayConfigManager;
 import dev.crossserverchat.net.RedisRelayManager;
@@ -53,6 +54,12 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 			}
 		});
 		ServerLifecycleEvents.SERVER_STOPPING.register(server -> stopRelay());
+		VanishCompat.register(() -> {
+			RedisRelayManager manager = relayManager;
+			if (manager != null) {
+				manager.playerVisibilityChanged();
+			}
+		});
 		ServerMessageEvents.CHAT_MESSAGE.register((message, sender, boundChatType) ->
 				publishMessage(MessageType.PLAYER_CHAT, sender, message.decoratedContent().getString())
 		);
@@ -97,6 +104,12 @@ public final class CrossServerChatMod implements DedicatedServerModInitializer {
 	}
 
 	private void publishMessage(MessageType type, ServerPlayer sender, String text) {
+		// Chat, join, leave and death events can all reveal a vanished player's presence.
+		// Suppress them at the source so no remote viewer receives identifying messages.
+		if (VanishCompat.isVanished(sender)) {
+			return;
+		}
+
 		RedisRelayManager current = relayManager;
 		if (current == null) {
 			return;
